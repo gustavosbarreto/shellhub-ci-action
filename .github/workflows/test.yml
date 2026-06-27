@@ -1,0 +1,17 @@
+name: test
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  selftest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      # Mock-based: validates the action's control logic (register/accept/tag/
+      # delete) without ShellHub. The real path is in integration.yml.
+      - run: node test/selftest.js

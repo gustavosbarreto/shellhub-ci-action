@@ -1,0 +1,12 @@
+{
+  "name": "shellhub-ci-action",
+  "version": "0.1.0",
+  "description": "Register a CI runner as an ephemeral ShellHub device for audited SSH debug access",
+  "main": "index.js",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/shellhub-io/ci-action"
+  },
+  "private": true
+}

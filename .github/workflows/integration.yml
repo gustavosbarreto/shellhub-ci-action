@@ -1,0 +1,110 @@
+name: integration
+
+# Real end-to-end test: brings up a self-hosted ShellHub (pinned release), seeds
+# a namespace + API key entirely through the API, runs the action against it, and
+# asserts the runner registered, was accepted, and is online. No mocks.
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+env:
+  SHELLHUB_VERSION: v0.25.1
+  DEVICE_NAME: ci-it-${{ github.run_id }}-${{ github.run_attempt }}
+
+jobs:
+  real:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bring up ShellHub ${{ env.SHELLHUB_VERSION }}
+        run: |
+          set -euo pipefail
+          git clone --depth 1 --branch "$SHELLHUB_VERSION" \
+            https://github.com/shellhub-io/shellhub.git shellhub
+          cd shellhub
+          # Pin version + force the Postgres backend, regardless of what the tag's
+          # .env defaults to. Later keys win when compose reads .env.
+          cat >> .env <<EOF
+          SHELLHUB_VERSION=${SHELLHUB_VERSION}
+          SHELLHUB_DATABASE=postgres
+          SHELLHUB_POSTGRES_HOST=postgres
+          SHELLHUB_POSTGRES_PORT=5432
+          SHELLHUB_POSTGRES_USERNAME=admin
+          SHELLHUB_POSTGRES_PASSWORD=admin
+          SHELLHUB_POSTGRES_DATABASE=main
+          EOF
+          export COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml
+          echo "COMPOSE_FILE=$PWD/docker-compose.yml:$PWD/docker-compose.postgres.yml" >> "$GITHUB_ENV"
+          echo "SHELLHUB_DIR=$PWD" >> "$GITHUB_ENV"
+          docker compose up -d
+
+      - name: Wait for the API
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 60); do
+            if curl -fsS http://localhost/info >/dev/null 2>&1; then
+              echo "ShellHub is up:"; curl -fsS http://localhost/info; echo; exit 0
+            fi
+            sleep 5
+          done
+          echo "ShellHub did not come up in time"; docker compose -f $COMPOSE_FILE logs --tail=80; exit 1
+
+      - name: Seed namespace and API key
+        id: seed
+        run: |
+          set -euo pipefail
+          BASE=http://localhost
+          PASS='Passw0rd!123'
+          # 1. first-run setup creates the admin user
+          curl -fsS -X POST "$BASE/api/setup" -H 'Content-Type: application/json' \
+            -d "{\"email\":\"admin@ci.local\",\"name\":\"CI Admin\",\"username\":\"ciadmin\",\"password\":\"$PASS\"}"
+          # 2. login -> user JWT
+          token=$(curl -fsS -X POST "$BASE/api/login" -H 'Content-Type: application/json' \
+            -d "{\"username\":\"ciadmin\",\"password\":\"$PASS\"}" | jq -r .token)
+          # 3. create namespace -> tenant id
+          tenant=$(curl -fsS -X POST "$BASE/api/namespaces" -H "Authorization: Bearer $token" \
+            -H 'Content-Type: application/json' -d '{"name":"ci","type":"team"}' \
+            | jq -r '.tenant_id // .tenant')
+          # 4. swap to a tenant-scoped JWT (the gateway sets X-Tenant-ID from the token)
+          stoken=$(curl -fsS "$BASE/api/auth/token/$tenant" -H "Authorization: Bearer $token" | jq -r .token)
+          # 5. create the API key with a value we choose, so we don't depend on the response
+          apikey=$(cat /proc/sys/kernel/random/uuid)
+          curl -fsS -X POST "$BASE/api/namespaces/api-key" -H "Authorization: Bearer $stoken" \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"ci-action\",\"expires_at\":-1,\"key\":\"$apikey\",\"role\":\"administrator\"}"
+          echo "::add-mask::$apikey"
+          echo "tenant=$tenant" >> "$GITHUB_OUTPUT"
+          echo "apikey=$apikey" >> "$GITHUB_OUTPUT"
+          echo "Seeded namespace tenant=$tenant"
+
+      - name: Register this runner with ShellHub (action under test)
+        uses: ./
+        with:
+          server: http://localhost
+          tenant-id: ${{ steps.seed.outputs.tenant }}
+          api-key: ${{ steps.seed.outputs.apikey }}
+          name: ${{ env.DEVICE_NAME }}
+          detached: true
+
+      - name: Assert the runner is registered, accepted and online
+        run: |
+          set -euo pipefail
+          BASE=http://localhost
+          KEY='${{ steps.seed.outputs.apikey }}'
+          uid=$(curl -fsS -H "X-API-Key: $KEY" "$BASE/api/devices?status=accepted&per_page=100" \
+            | jq -r --arg n "$DEVICE_NAME" '.[] | select(.name==$n) | .uid')
+          if [ -z "$uid" ]; then
+            echo "device '$DEVICE_NAME' not found/accepted; current devices:"
+            curl -fsS -H "X-API-Key: $KEY" "$BASE/api/devices?per_page=100" | jq -r '.[] | "\(.name) \(.status) online=\(.online)"'
+            exit 1
+          fi
+          online=$(curl -fsS -H "X-API-Key: $KEY" "$BASE/api/devices/$uid" | jq -r .online)
+          echo "device $uid accepted, online=$online"
+          test "$online" = "true"
+
+      - name: ShellHub logs on failure
+        if: failure()
+        run: cd "$SHELLHUB_DIR" && docker compose logs --tail=120

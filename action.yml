@@ -1,0 +1,47 @@
+name: "ShellHub CI Debug"
+description: "Register the CI runner as an ephemeral ShellHub device for audited SSH debug access through your own gateway"
+author: "ShellHub"
+branding:
+  icon: "terminal"
+  color: "blue"
+
+inputs:
+  server:
+    description: "ShellHub server address (e.g. https://cloud.shellhub.io)"
+    required: true
+  tenant-id:
+    description: "ShellHub namespace tenant ID"
+    required: true
+  api-key:
+    description: "ShellHub API key with device accept/remove permission. Store as a secret."
+    required: true
+  name:
+    description: "Device name. Defaults to a unique per-run name."
+    required: false
+    default: "ci-${{ github.run_id }}-${{ github.run_attempt }}"
+  tags:
+    description: "Comma-separated tags to apply to the device (for access scoping). Tag names must be alphanumeric and at least 3 characters."
+    required: false
+    default: "github"
+  detached:
+    description: "If true, the job continues while the SSH session stays reachable. If false (default), the job blocks until you connect and disconnect, or you touch the continue file."
+    required: false
+    default: "false"
+  timeout:
+    description: "Max seconds to hold the runner open for SSH in blocking mode (0 = wait indefinitely)."
+    required: false
+    default: "0"
+  agent-version:
+    description: "Pin the agent version. Defaults to the server's reported version."
+    required: false
+    default: ""
+  install-url:
+    description: "Override the install script URL. Defaults to <server>/install.sh."
+    required: false
+    default: ""
+
+runs:
+  using: "node20"
+  main: "index.js"
+  post: "index.js"
+  post-if: "!cancelled()"
