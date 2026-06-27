@@ -70,9 +70,22 @@ Stay reachable for the rest of the job instead of blocking:
 | `authorize-actor` | no | `false` | Authorize the GitHub keys of the user who triggered the run |
 | `ssh-username` | no | `.*` | Username (regexp) the authorized keys may log in as |
 | `detached` | no | `false` | Continue the job instead of blocking |
-| `timeout` | no | `0` | Max seconds to block (0 = indefinite) |
+| `timeout` | no | `0` | Max seconds to block in blocking mode (0 = indefinite) |
+| `idle-timeout` | no | `0` | In detached mode, seconds the post step waits for a connection at job end (0 = tear down immediately) |
 | `agent-version` | no | server's version | Pin the agent version |
 | `install-url` | no | `<server>/install.sh` | Override the install script URL |
+
+## Outputs
+
+| Output | Description |
+|--------|-------------|
+| `sshid` | The SSHID to connect (`<namespace>.<device>@<host>`) |
+| `web-url` | Browser URL that opens the runner's web terminal in the ShellHub console |
+| `device-uid` | The ephemeral device UID |
+
+The job log prints both an `ssh` command and a `web-url`. Open the `web-url` to get
+a terminal into the runner straight from your browser, through the ShellHub console
+(so it keeps login, RBAC, and recording).
 
 ## Authorizing access
 

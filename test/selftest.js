@@ -69,6 +69,7 @@ function runPhase(server, stateFile, extraEnv) {
   const env = {
     ...process.env,
     GITHUB_STATE: stateFile,
+    GITHUB_OUTPUT: stateFile + ".out",
     GITHUB_WORKSPACE: os.tmpdir(),
     "INPUT_SERVER": server,
     "INPUT_TENANT-ID": TENANT,
@@ -123,6 +124,11 @@ server.listen(0, async () => {
   process.stdout.write(main.stdout || "");
   process.stderr.write(main.stderr || "");
   assert(main.status === 0, "main phase exits 0");
+
+  const outputs = parseState(stateFile + ".out");
+  assert(outputs["device-uid"] === UID, "set the device-uid output");
+  assert(/\.connect=true$|\?connect=true$/.test(outputs["web-url"] || ""), "set the web-url output");
+  assert((outputs["sshid"] || "").includes(NAME), "set the sshid output");
 
   const state = parseState(stateFile);
   const stateEnv = {};

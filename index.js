@@ -30,6 +30,11 @@ function getState(name) {
   return process.env["STATE_" + name] || "";
 }
 
+function setOutput(name, value) {
+  const file = process.env.GITHUB_OUTPUT;
+  if (file) fs.appendFileSync(file, `${name}=${value}\n`);
+}
+
 function mask(secret) {
   if (secret) console.log(`::add-mask::${secret}`);
 }
@@ -50,6 +55,13 @@ function api(server, apiKey, method, route, body) {
     headers,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+}
+
+async function hasActiveSession(server, apiKey, uid) {
+  const res = await api(server, apiKey, "GET", "/api/sessions?per_page=100");
+  if (!res.ok) return false;
+  const sessions = await res.json();
+  return (sessions || []).some((s) => s.device_uid === uid && s.active);
 }
 
 async function findPendingUID(server, apiKey, name) {
@@ -228,7 +240,12 @@ async function main() {
   }
   const host = new URL(server).hostname;
   const sshid = `${namespace}.${name}@${host}`;
+  const webURL = `${server}/devices/${uid}?connect=true`;
   notice(`SSH into this runner:  ssh <user>@${sshid}`);
+  notice(`Web terminal:  ${webURL}`);
+  setOutput("sshid", sshid);
+  setOutput("web-url", webURL);
+  setOutput("device-uid", uid);
 
   if (detached) {
     console.log("Detached: the runner stays reachable while the job runs.");
@@ -263,6 +280,29 @@ async function post() {
   if (!uid || !server) {
     console.log("Nothing to tear down.");
     return;
+  }
+
+  // Detached + idle-timeout: hold the runner open at job end so someone can
+  // still connect (tmate's detached behavior). Wait for a session to appear,
+  // then for it to end; give up if nobody connects within the timeout.
+  const idle = parseInt(getInput("idle-timeout") || "0", 10);
+  if (getInput("detached") === "true" && idle > 0) {
+    console.log(`Waiting up to ${idle}s for an SSH connection...`);
+    const deadline = Date.now() + idle * 1000;
+    let connected = false;
+    while (true) {
+      const active = await hasActiveSession(server, apiKey, uid);
+      if (active) {
+        connected = true;
+      } else if (connected) {
+        console.log("Session ended.");
+        break;
+      } else if (Date.now() > deadline) {
+        console.log("No connection within the idle timeout.");
+        break;
+      }
+      await sleep(5000);
+    }
   }
 
   // Delete the ephemeral device.

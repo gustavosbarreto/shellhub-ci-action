@@ -43,6 +43,10 @@ inputs:
     description: "Max seconds to hold the runner open for SSH in blocking mode (0 = wait indefinitely)."
     required: false
     default: "0"
+  idle-timeout:
+    description: "In detached mode, seconds the post step waits at job end for an SSH connection before tearing down (0 = tear down immediately). Once connected, it waits until you disconnect."
+    required: false
+    default: "0"
   agent-version:
     description: "Pin the agent version. Defaults to the server's reported version."
     required: false
@@ -51,6 +55,14 @@ inputs:
     description: "Override the install script URL. Defaults to <server>/install.sh."
     required: false
     default: ""
+
+outputs:
+  sshid:
+    description: "The SSHID to connect to the runner (user@namespace.device@host)."
+  web-url:
+    description: "Browser URL that opens the runner's web terminal in the ShellHub console."
+  device-uid:
+    description: "The ephemeral device UID."
 
 runs:
   using: "node24"
