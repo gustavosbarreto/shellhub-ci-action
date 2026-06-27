@@ -292,9 +292,16 @@ async function post() {
   // Delete the ephemeral device.
   try {
     const res = await api(server, apiKey, "DELETE", `/api/devices/${uid}`);
-    console.log(`Removed device ${uid} (HTTP ${res.status}).`);
+    if (res.ok) {
+      console.log(`Removed device ${uid}.`);
+    } else {
+      console.log(
+        `::warning::could not remove device ${uid} (HTTP ${res.status}); ` +
+          `it will linger. The API key needs the device remove permission.`,
+      );
+    }
   } catch (err) {
-    console.log(`Could not remove device: ${err.message}`);
+    console.log(`::warning::could not remove device ${uid}: ${err.message}`);
   }
 
   // Stop the agent container.
