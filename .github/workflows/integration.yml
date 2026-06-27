@@ -17,7 +17,7 @@ jobs:
   real:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: Bring up ShellHub ${{ env.SHELLHUB_VERSION }}
         run: |
@@ -105,6 +105,28 @@ jobs:
           online=$(curl -fsS -H "X-API-Key: $KEY" "$BASE/api/devices/$uid" | jq -r .online)
           echo "device $uid accepted, online=$online"
           test "$online" = "true"
+
+      - name: SSH into the runner through ShellHub and prove the host shell
+        run: |
+          set -euo pipefail
+          BASE=http://localhost
+          KEY='${{ steps.seed.outputs.apikey }}'
+          # Register a public key scoped to the 'github' tag (the action tags the
+          # device 'github') for any username. This is the auth model: a key the
+          # user registers, scoped to the device by tag.
+          ssh-keygen -t rsa -b 2048 -f ci_key -N '' -q
+          data=$(base64 -w0 ci_key.pub)
+          curl -fsS -X POST "$BASE/api/sshkeys/public-keys" -H "X-API-Key: $KEY" \
+            -H 'Content-Type: application/json' \
+            -d "{\"name\":\"ci\",\"username\":\".*\",\"data\":\"$data\",\"filter\":{\"tags\":[\"github\"]}}"
+          # SSH back into THIS runner through the ShellHub gateway (resolves by
+          # namespace name 'ci' + device name) and run a command on the host.
+          out=$(ssh -i ci_key -p 2222 \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes -o ConnectTimeout=20 \
+            "root@ci.$DEVICE_NAME@localhost" 'cat /etc/hostname')
+          echo "hostname seen over ShellHub SSH: '$out' (runner: '$(cat /etc/hostname)')"
+          test "$out" = "$(cat /etc/hostname)"
 
       - name: ShellHub logs on failure
         if: failure()

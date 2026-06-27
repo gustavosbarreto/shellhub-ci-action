@@ -150,9 +150,20 @@ async function main() {
     if (!res.ok) console.log(`  could not apply tag '${tag}' (HTTP ${res.status})`);
   }
 
-  // 5. Print how to connect.
+  // 5. Print how to connect. The SSH gateway resolves a device by its namespace
+  //    NAME (not the tenant id), so read it back from the device.
+  let namespace = tenant;
+  try {
+    const dres = await api(server, apiKey, "GET", `/api/devices/${uid}`);
+    if (dres.ok) {
+      const dev = await dres.json();
+      if (dev && dev.namespace) namespace = dev.namespace;
+    }
+  } catch {
+    /* fall back to the tenant id */
+  }
   const host = new URL(server).hostname;
-  const sshid = `${tenant}.${name}@${host}`;
+  const sshid = `${namespace}.${name}@${host}`;
   notice(`SSH into this runner:  ssh <user>@${sshid}`);
 
   if (detached) {
