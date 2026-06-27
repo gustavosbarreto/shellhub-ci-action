@@ -12,6 +12,7 @@
 const { execSync } = require("node:child_process");
 const crypto = require("node:crypto");
 const fs = require("node:fs");
+const os = require("node:os");
 const path = require("node:path");
 
 // --- minimal @actions/core surface, reimplemented to avoid a build step ------
@@ -301,9 +302,16 @@ async function main() {
   }
   const host = new URL(server).hostname;
   const sshid = `${namespace}.${name}@${host}`;
-  // Use the username only if it was pinned to a concrete one; otherwise we do not
-  // know it, so show a placeholder for the reader to fill in.
-  const connectUser = sshUsername && sshUsername !== ".*" ? sshUsername : "<user>";
+  // Suggest the job's own user (e.g. "runner") in the printed command, since that
+  // is where the build ran. The key still authorizes any user, so you can also
+  // connect as root. A pinned ssh-username wins.
+  let jobUser = "runner";
+  try {
+    jobUser = os.userInfo().username;
+  } catch {
+    jobUser = process.env.USER || "runner";
+  }
+  const connectUser = sshUsername && sshUsername !== ".*" ? sshUsername : jobUser;
   const sshCmd = `ssh ${connectUser}@${sshid}`;
   const webURL = `${server}/devices/${uid}?connect=true`;
   notice(`SSH into this runner:  ${sshCmd}`);

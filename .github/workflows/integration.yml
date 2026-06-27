@@ -129,7 +129,7 @@ jobs:
           out=$(ssh -i "$HOME/ci_key" -p 2222 \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes -o ConnectTimeout=20 \
-            "root@ci.$DEVICE_NAME@localhost" 'cat /etc/hostname')
+            "$(id -un)@ci.$DEVICE_NAME@localhost" 'cat /etc/hostname')
           echo "hostname seen over ShellHub SSH: '$out' (runner: '$(cat /etc/hostname)')"
           test "$out" = "$(cat /etc/hostname)"
 
@@ -142,7 +142,7 @@ jobs:
           ssh -tt -i "$HOME/ci_key" -p 2222 \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes -o ConnectTimeout=20 \
-            "root@ci.$DEVICE_NAME@localhost" 'sleep 25' >/tmp/ssh.log 2>&1 &
+            "$(id -un)@ci.$DEVICE_NAME@localhost" 'sleep 25' >/tmp/ssh.log 2>&1 &
           sshpid=$!
           sleep 8
           during=$(pts)
