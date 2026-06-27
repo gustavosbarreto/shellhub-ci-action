@@ -10,8 +10,9 @@ inputs:
     description: "ShellHub server address (e.g. https://cloud.shellhub.io)"
     required: true
   tenant-id:
-    description: "ShellHub namespace tenant ID"
-    required: true
+    description: "ShellHub namespace tenant ID. Optional: derived from the API key (which is already namespace-scoped) when omitted."
+    required: false
+    default: ""
   api-key:
     description: "ShellHub API key with device accept/remove permission. Store as a secret."
     required: true
