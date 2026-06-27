@@ -1,9 +1,13 @@
 # ShellHub CI Debug Action
 
-SSH into a live CI runner to debug a failing build, through your own ShellHub
-gateway. Unlike `action-tmate`, the session goes through ShellHub, so it is
-recorded, RBAC-gated, and uses your central keys. No session URL is printed to
-public logs.
+SSH into a live CI runner to debug a failing build, through ShellHub. Works with
+[ShellHub Cloud](https://cloud.shellhub.io) or your own self-hosted instance, set
+by the `server` input.
+
+Unlike `action-tmate`, the session goes through your ShellHub gateway, so access
+is governed by your namespace RBAC (roles and per-key/per-tag scoping), the session
+is recorded, and it authenticates with keys you manage centrally. No session URL is
+printed to public logs.
 
 The action installs the ShellHub agent on the runner, registers it as an
 ephemeral device, accepts it, and removes it when the job ends.
