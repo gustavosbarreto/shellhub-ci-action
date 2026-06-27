@@ -67,7 +67,7 @@ Stay reachable for the rest of the job instead of blocking:
 | `name` | no | `ci-<run_id>-<attempt>` | Device name |
 | `tags` | no | `github` | Comma-separated tags for access scoping |
 | `public-key` | no | | SSH public key(s) to authorize, in authorized_keys format (one per line) |
-| `authorize-actor` | no | `false` | Authorize the GitHub keys of the user who triggered the run |
+| `authorize-actor` | no | `false` | Authorize the triggering user's GitHub keys (`true` requires them, `auto` is best-effort) |
 | `ssh-username` | no | `.*` | Username (regexp) the authorized keys may log in as |
 | `detached` | no | `false` | Continue the job instead of blocking |
 | `timeout` | no | `0` | Max seconds to block in blocking mode (0 = indefinite) |

@@ -57,13 +57,6 @@ function api(server, apiKey, method, route, body) {
   });
 }
 
-async function hasActiveSession(server, apiKey, uid) {
-  const res = await api(server, apiKey, "GET", "/api/sessions?per_page=100");
-  if (!res.ok) return false;
-  const sessions = await res.json();
-  return (sessions || []).some((s) => s.device_uid === uid && s.active);
-}
-
 async function findPendingUID(server, apiKey, name) {
   const res = await api(
     server,
@@ -81,7 +74,7 @@ async function findPendingUID(server, apiKey, name) {
 
 // Collect the public keys to authorize: an explicit input and/or the GitHub keys
 // of the user who triggered the run.
-async function collectKeys(provided, useActor) {
+async function collectKeys(provided, useActor, quiet) {
   const keys = [];
   if (provided) {
     keys.push(...provided.split("\n").map((l) => l.trim()).filter(Boolean));
@@ -89,13 +82,15 @@ async function collectKeys(provided, useActor) {
   if (useActor) {
     const actor = process.env.GITHUB_ACTOR;
     if (!actor) {
-      console.log("  authorize-actor is on but GITHUB_ACTOR is unset; skipping.");
+      if (!quiet) console.log("  authorize-actor is on but GITHUB_ACTOR is unset; skipping.");
     } else {
       const res = await fetch(`https://github.com/${actor}.keys`);
       if (res.ok) {
         const text = await res.text();
         const actorKeys = text.split("\n").map((l) => l.trim()).filter(Boolean);
-        if (!actorKeys.length) console.log(`  @${actor} has no public keys on GitHub.`);
+        // In 'auto' mode, an actor with no keys is a silent no-op; in 'true' it's
+        // worth flagging, since the user explicitly asked for actor access.
+        if (!actorKeys.length && !quiet) console.log(`  @${actor} has no public keys on GitHub.`);
         keys.push(...actorKeys);
       } else {
         console.log(`  could not fetch @${actor}'s keys (HTTP ${res.status}).`);
@@ -140,7 +135,7 @@ async function main() {
   const name = getInput("name");
   const tags = getInput("tags").split(",").map((t) => t.trim()).filter(Boolean);
   const publicKey = getInput("public-key");
-  const authorizeActor = getInput("authorize-actor") === "true";
+  const actorMode = getInput("authorize-actor"); // "true" | "auto" | "false"
   const sshUsername = getInput("ssh-username") || ".*";
   const detached = getInput("detached") === "true";
   const timeout = parseInt(getInput("timeout") || "0", 10);
@@ -220,7 +215,8 @@ async function main() {
 
   // 4b. Authorize SSH keys so someone can actually connect: an explicit key
   //     and/or the triggering GitHub user's keys, scoped to the device's tags.
-  const keys = await collectKeys(publicKey, authorizeActor);
+  const useActor = actorMode === "true" || actorMode === "auto";
+  const keys = await collectKeys(publicKey, useActor, actorMode === "auto");
   if (keys.length) {
     console.log(`Authorizing ${keys.length} public key(s)...`);
     await authorizeKeys(server, apiKey, keys, sshUsername, tags);
@@ -282,27 +278,15 @@ async function post() {
     return;
   }
 
-  // Detached + idle-timeout: hold the runner open at job end so someone can
-  // still connect (tmate's detached behavior). Wait for a session to appear,
-  // then for it to end; give up if nobody connects within the timeout.
+  // Detached + idle-timeout: hold the runner open for a fixed window at job end
+  // so someone still has time to connect. We deliberately do NOT try to release
+  // early on disconnect: there is no reliable per-device active-session query yet
+  // (shellhub-io/shellhub#6564), so a fixed hold is honest rather than falsely
+  // precise. Once that lands, this can wait for the session to actually end.
   const idle = parseInt(getInput("idle-timeout") || "0", 10);
   if (getInput("detached") === "true" && idle > 0) {
-    console.log(`Waiting up to ${idle}s for an SSH connection...`);
-    const deadline = Date.now() + idle * 1000;
-    let connected = false;
-    while (true) {
-      const active = await hasActiveSession(server, apiKey, uid);
-      if (active) {
-        connected = true;
-      } else if (connected) {
-        console.log("Session ended.");
-        break;
-      } else if (Date.now() > deadline) {
-        console.log("No connection within the idle timeout.");
-        break;
-      }
-      await sleep(5000);
-    }
+    console.log(`Holding the runner open for ${idle}s before teardown...`);
+    await sleep(idle * 1000);
   }
 
   // Delete the ephemeral device.

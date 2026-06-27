@@ -28,7 +28,7 @@ inputs:
     required: false
     default: ""
   authorize-actor:
-    description: "If true, authorize the GitHub public keys of the user who triggered the run (from github.com/<actor>.keys), scoped to the device's tags."
+    description: "Authorize the GitHub public keys of the user who triggered the run (from github.com/<actor>.keys), scoped to the device's tags. Use 'true' to require them (warns if the actor has none) or 'auto' for best-effort (silent if none)."
     required: false
     default: "false"
   ssh-username:
