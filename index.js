@@ -152,7 +152,7 @@ function ptyCount() {
 // for someone to connect, then hold until they disconnect. `sudo touch /continue`
 // releases it manually at any point. connectTimeout <= 0 waits indefinitely for
 // the first connection.
-async function holdForDebug(sshid, connectTimeout, baseline) {
+async function holdForDebug(sshCmd, connectTimeout, baseline) {
   const continueFiles = ["/continue", path.join(process.env.GITHUB_WORKSPACE || ".", "continue")];
   const deadline = connectTimeout > 0 ? Date.now() + connectTimeout * 1000 : Infinity;
   let connected = false;
@@ -177,7 +177,7 @@ async function holdForDebug(sshid, connectTimeout, baseline) {
       console.log("No connection within the timeout; releasing.");
       return;
     }
-    if (!connected && sshid) notice(`Waiting for SSH:  ssh <user>@${sshid}`);
+    if (!connected && sshCmd) notice(`Waiting for SSH:  ${sshCmd}`);
     await sleep(5000);
   }
 }
@@ -192,6 +192,9 @@ async function main() {
   const tags = getInput("tags").split(",").map((t) => t.trim()).filter(Boolean);
   const publicKey = getInput("public-key");
   const actorMode = getInput("authorize-actor"); // "true" | "auto" | "false"
+  // We do not know which host user you will connect as: the agent runs as root
+  // and logs you in as whatever the SSHID asks for (root, the job's user, etc.).
+  // So the key authorizes any user by default; set ssh-username to lock it down.
   const sshUsername = getInput("ssh-username") || ".*";
   const detached = getInput("detached") === "true";
   const timeout = parseInt(getInput("timeout") || "0", 10);
@@ -298,10 +301,15 @@ async function main() {
   }
   const host = new URL(server).hostname;
   const sshid = `${namespace}.${name}@${host}`;
+  // Use the username only if it was pinned to a concrete one; otherwise we do not
+  // know it, so show a placeholder for the reader to fill in.
+  const connectUser = sshUsername && sshUsername !== ".*" ? sshUsername : "<user>";
+  const sshCmd = `ssh ${connectUser}@${sshid}`;
   const webURL = `${server}/devices/${uid}?connect=true`;
-  notice(`SSH into this runner:  ssh <user>@${sshid}`);
+  notice(`SSH into this runner:  ${sshCmd}`);
   notice(`Web terminal:  ${webURL}`);
   setOutput("sshid", sshid);
+  setOutput("ssh-command", sshCmd);
   setOutput("web-url", webURL);
   setOutput("device-uid", uid);
 
@@ -312,7 +320,7 @@ async function main() {
 
   // 6. Blocking mode: wait for a connection (up to `timeout`), then hold until
   //    you disconnect. `sudo touch /continue` releases it manually.
-  await holdForDebug(sshid, timeout, ptsBaseline);
+  await holdForDebug(sshCmd, timeout, ptsBaseline);
 }
 
 async function post() {

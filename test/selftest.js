@@ -134,6 +134,7 @@ server.listen(0, async () => {
   assert(outputs["device-uid"] === UID, "set the device-uid output");
   assert(/\.connect=true$|\?connect=true$/.test(outputs["web-url"] || ""), "set the web-url output");
   assert((outputs["sshid"] || "").includes(NAME), "set the sshid output");
+  assert(/^ssh \S+@/.test(outputs["ssh-command"] || ""), "set the ssh-command output with a username");
 
   const state = parseState(stateFile);
   const stateEnv = {};

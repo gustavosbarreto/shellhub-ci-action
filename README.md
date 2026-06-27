@@ -4,10 +4,10 @@ SSH into a live CI runner to debug a failing build, through ShellHub. Works with
 [ShellHub Cloud](https://cloud.shellhub.io) or your own self-hosted instance, set
 by the `server` input.
 
-Unlike `action-tmate`, the session goes through your ShellHub gateway, so access
-is governed by your namespace RBAC (roles and per-key/per-tag scoping), the session
-is recorded, and it authenticates with keys you manage centrally. No session URL is
-printed to public logs.
+The session goes through your ShellHub gateway, so access is governed by your
+namespace RBAC (roles and per-key/per-tag scoping), the session is recorded, and it
+authenticates with keys you manage centrally. No session URL is printed to public
+logs.
 
 The action installs the ShellHub agent on the runner, registers it as an
 ephemeral device, accepts it, and removes it when the job ends.
@@ -28,11 +28,14 @@ early. Connection state is read from the runner's `/dev/pts` (each session gets 
 PTY), so it releases a few seconds after you disconnect, even if the connection
 drops.
 
-Connect with the SSHID printed in the job log:
+The job log prints the `ssh` command. The agent runs as root and can open a shell
+as any host user, so connect as whichever you need (`root`, the job user, etc.):
 
 ```
-ssh <user>@<tenant>.ci-<run_id>-<attempt>@cloud.shellhub.io
+ssh <user>@<namespace>.ci-<run_id>-<attempt>@cloud.shellhub.io
 ```
+
+Set `ssh-username` to pin a single user and have it filled into the printed command.
 
 The agent runs with host access, so the shell lands on the runner itself, not an
 isolated container.
@@ -75,7 +78,7 @@ Stay reachable for the rest of the job instead of blocking:
 | `tags` | no | `github` | Comma-separated tags for access scoping |
 | `public-key` | no | | SSH public key(s) to authorize, in authorized_keys format (one per line) |
 | `authorize-actor` | no | `false` | Authorize the triggering user's GitHub keys (`true` requires them, `auto` is best-effort) |
-| `ssh-username` | no | `.*` | Username (regexp) the authorized keys may log in as |
+| `ssh-username` | no | `.*` | Username (regexp) the authorized key may log in as; pin one to lock it down and show it in the SSHID |
 | `detached` | no | `false` | Continue the job instead of blocking |
 | `timeout` | no | `0` | Blocking mode: seconds to wait for a connection (then holds until you disconnect; 0 = wait indefinitely) |
 | `idle-timeout` | no | `0` | Detached mode: seconds the post step waits for a connection at job end (then holds until disconnect; 0 = tear down immediately) |
@@ -86,7 +89,8 @@ Stay reachable for the rest of the job instead of blocking:
 
 | Output | Description |
 |--------|-------------|
-| `sshid` | The SSHID to connect (`<namespace>.<device>@<host>`) |
+| `sshid` | The device SSHID without the username (`<namespace>.<device>@<host>`) |
+| `ssh-command` | The full `ssh` command, including the resolved username |
 | `web-url` | Browser URL that opens the runner's web terminal in the ShellHub console |
 | `device-uid` | The ephemeral device UID |
 

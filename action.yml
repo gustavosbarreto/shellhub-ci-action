@@ -32,7 +32,7 @@ inputs:
     required: false
     default: "false"
   ssh-username:
-    description: "Username (regexp) the authorized keys may log in as on the runner. Defaults to any."
+    description: "Username (regexp) the authorized key may log in as. Defaults to any; the agent runs as root and can open a shell as any host user (root, the job user, etc.). Set a concrete value to lock it down and to have it shown in the printed SSHID."
     required: false
     default: ".*"
   detached:
@@ -58,7 +58,9 @@ inputs:
 
 outputs:
   sshid:
-    description: "The SSHID to connect to the runner (user@namespace.device@host)."
+    description: "The device SSHID (namespace.device@host), without the username."
+  ssh-command:
+    description: "The full ssh command to connect, including the resolved username."
   web-url:
     description: "Browser URL that opens the runner's web terminal in the ShellHub console."
   device-uid:
