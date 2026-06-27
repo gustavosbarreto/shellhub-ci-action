@@ -120,13 +120,16 @@ tags. There are three ways:
        authorize-actor: true
    ```
 
-Authorized keys persist in the namespace (scoped to the tag) and are reused across
-runs; remove them in ShellHub when no longer needed.
+A key you pass to the action (`public-key` or `authorize-actor`) is an ephemeral
+grant: the action authorizes it for the run and removes it on teardown. A key you
+register in ShellHub yourself (option 1) is left untouched and persists. The API
+key therefore also needs the public key remove permission.
 
 ## Requirements
 
 - The runner needs Docker (default on GitHub-hosted `ubuntu-*` runners).
-- The API key needs the device accept and remove permissions in the namespace.
+- The API key needs device accept/remove and, when authorizing keys, public key
+  create/remove permissions (an administrator or owner key has these).
 - Namespace **auto-accept can be off**: the action accepts the device itself.
 
 ## Security notes

@@ -104,10 +104,14 @@ async function collectKeys(provided, useActor, quiet) {
 // Register each public key in the namespace, scoped to the device's tags so it
 // only grants access to the CI runners. Best-effort and idempotent: a key that
 // already exists comes back as a conflict, which is fine.
+// Returns the fingerprints of the keys this run actually created (HTTP 2xx), so
+// the post phase can remove exactly those. A key that already existed (409) is
+// left alone: it is someone else's, or a standing key the user manages.
 async function authorizeKeys(server, apiKey, keys, username, tags) {
+  const created = [];
   if (keys.length && !tags.length) {
     console.log("  cannot authorize keys without a tag to scope them to; skipping.");
-    return;
+    return created;
   }
   for (const key of keys) {
     const hash = crypto.createHash("sha256").update(key).digest("hex").slice(0, 12);
@@ -119,11 +123,14 @@ async function authorizeKeys(server, apiKey, keys, username, tags) {
     };
     const res = await api(server, apiKey, "POST", "/api/sshkeys/public-keys", body);
     if (res.ok) {
+      const body = await res.json().catch(() => null);
+      if (body && body.fingerprint) created.push(body.fingerprint);
       console.log(`  authorized key ci-${hash} for ${username || ".*"}@[${tags.join(",")}]`);
     } else if (res.status !== 409) {
       console.log(`  could not authorize a key (HTTP ${res.status}).`);
     }
   }
+  return created;
 }
 
 // Number of allocated pseudo-terminals on the runner. The agent gives each
@@ -272,7 +279,9 @@ async function main() {
   const keys = await collectKeys(publicKey, useActor, actorMode === "auto");
   if (keys.length) {
     console.log(`Authorizing ${keys.length} public key(s)...`);
-    await authorizeKeys(server, apiKey, keys, sshUsername, tags);
+    const created = await authorizeKeys(server, apiKey, keys, sshUsername, tags);
+    // Remember only the keys we created so the post phase removes exactly those.
+    if (created.length) saveState("createdKeys", created.join(","));
   }
 
   // 5. Print how to connect. The SSH gateway resolves a device by its namespace
@@ -322,6 +331,22 @@ async function post() {
   if (getInput("detached") === "true" && idle > 0) {
     const baseline = parseInt(getState("ptsBaseline") || "0", 10);
     await holdForDebug("", idle, baseline);
+  }
+
+  // Remove the public keys this run authorized (ephemeral grants). Keys it did
+  // not create are left untouched. Best-effort: needs the key remove permission.
+  const createdKeys = getState("createdKeys");
+  if (createdKeys) {
+    for (const fp of createdKeys.split(",").filter(Boolean)) {
+      try {
+        const res = await api(server, apiKey, "DELETE", `/api/sshkeys/public-keys/${encodeURIComponent(fp)}`);
+        if (!res.ok && res.status !== 404) {
+          console.log(`::warning::could not remove authorized key ${fp} (HTTP ${res.status}).`);
+        }
+      } catch (err) {
+        console.log(`::warning::could not remove authorized key ${fp}: ${err.message}`);
+      }
+    }
   }
 
   // Delete the ephemeral device.
