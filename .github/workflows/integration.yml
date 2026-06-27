@@ -25,24 +25,22 @@ jobs:
           git clone --depth 1 --branch "$SHELLHUB_VERSION" \
             https://github.com/shellhub-io/shellhub.git shellhub
           cd shellhub
-          # Pin version + force the Postgres backend, regardless of what the tag's
-          # .env defaults to. Later keys win when compose reads .env.
-          cat >> .env <<EOF
+          echo "SHELLHUB_DIR=$PWD" >> "$GITHUB_ENV"
+          # Overrides win over .env. production avoids the dev compose files; the
+          # runner already has something on host port 22, so move ShellHub's SSH
+          # port out of the way (the agent connects outbound, so this is only the
+          # external SSH listener).
+          cat > .env.override <<EOF
+          SHELLHUB_ENV=production
           SHELLHUB_VERSION=${SHELLHUB_VERSION}
           SHELLHUB_DATABASE=postgres
-          SHELLHUB_POSTGRES_HOST=postgres
-          SHELLHUB_POSTGRES_PORT=5432
-          SHELLHUB_POSTGRES_USERNAME=admin
-          SHELLHUB_POSTGRES_PASSWORD=admin
-          SHELLHUB_POSTGRES_DATABASE=main
+          SHELLHUB_SSH_PORT=2222
           EOF
-          export COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml
-          echo "COMPOSE_FILE=$PWD/docker-compose.yml:$PWD/docker-compose.postgres.yml" >> "$GITHUB_ENV"
-          echo "SHELLHUB_DIR=$PWD" >> "$GITHUB_ENV"
-          # The compose mounts pre-generated RSA keys as secrets; the Makefile
-          # generates them (api_private_key/api_public_key/ssh_private_key).
+          # The compose mounts pre-generated RSA keys as secrets.
           make keygen
-          docker compose up -d
+          # The wrapper reads .env.override and assembles the right compose files
+          # (postgres backend, no dev mounts) for us.
+          ./bin/docker-compose up -d
 
       - name: Wait for the API
         run: |
@@ -53,7 +51,7 @@ jobs:
             fi
             sleep 5
           done
-          echo "ShellHub did not come up in time"; docker compose -f $COMPOSE_FILE logs --tail=80; exit 1
+          echo "ShellHub did not come up in time"; (cd "$SHELLHUB_DIR" && ./bin/docker-compose logs --tail=80); exit 1
 
       - name: Seed namespace and API key
         id: seed
@@ -110,4 +108,4 @@ jobs:
 
       - name: ShellHub logs on failure
         if: failure()
-        run: cd "$SHELLHUB_DIR" && docker compose logs --tail=120
+        run: cd "$SHELLHUB_DIR" && ./bin/docker-compose logs --tail=120
