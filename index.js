@@ -126,14 +126,16 @@ async function authorizeKeys(server, apiKey, keys, username, tags) {
   }
 }
 
-// Number of interactive logins on the runner, read from utmp. The agent writes a
-// utmp record for each host-mode SSH session and clears it when the shell exits
-// (even on an abrupt disconnect, since it tears down the PTY), so this detects
-// connect/disconnect locally, without any ShellHub session API.
-function loginCount() {
+// Number of allocated pseudo-terminals on the runner. The agent gives each
+// interactive host-mode session a PTY, and /dev is shared with the host (the
+// install mounts -v /dev:/dev), so a new entry in /dev/pts means someone is
+// connected, and it disappears when the shell exits (even on an abrupt
+// disconnect, since the agent tears the PTY down). This detects connect/
+// disconnect locally, with no ShellHub session API. (who/utmp does not work
+// here: the agent does not produce a who-visible record in the Docker setup.)
+function ptyCount() {
   try {
-    const out = execSync("who 2>/dev/null | wc -l", { encoding: "utf8" }).trim();
-    return parseInt(out || "0", 10) || 0;
+    return fs.readdirSync("/dev/pts").filter((n) => /^\d+$/.test(n)).length;
   } catch {
     return 0;
   }
@@ -157,7 +159,7 @@ async function holdForDebug(sshid, connectTimeout, baseline) {
       console.log("Continue file found; releasing.");
       return;
     }
-    const active = loginCount() > baseline;
+    const active = ptyCount() > baseline;
     if (active && !connected) {
       connected = true;
       console.log("Connection detected; holding until you disconnect.");
@@ -199,10 +201,10 @@ async function main() {
   // Mark that the post phase should run teardown even if main fails midway.
   saveState("isPost", "true");
   saveState("server", server);
-  // Snapshot the runner's logins now, before anyone could connect, so we can
-  // tell a real debug session apart from any baseline login later.
-  const whoBaseline = loginCount();
-  saveState("whoBaseline", String(whoBaseline));
+  // Snapshot the runner's PTYs now, before anyone could connect, so we can tell
+  // a real debug session apart from any baseline PTY later.
+  const ptsBaseline = ptyCount();
+  saveState("ptsBaseline", String(ptsBaseline));
 
   // 1. Install the agent the official way. install.sh auto-detects Docker and
   //    runs it with --pid=host -v /:/host, so the SSH session lands on the
@@ -301,7 +303,7 @@ async function main() {
 
   // 6. Blocking mode: wait for a connection (up to `timeout`), then hold until
   //    you disconnect. `sudo touch /continue` releases it manually.
-  await holdForDebug(sshid, timeout, whoBaseline);
+  await holdForDebug(sshid, timeout, ptsBaseline);
 }
 
 async function post() {
@@ -318,7 +320,7 @@ async function post() {
   // from utmp on the runner (see holdForDebug), so no session API is needed.
   const idle = parseInt(getInput("idle-timeout") || "0", 10);
   if (getInput("detached") === "true" && idle > 0) {
-    const baseline = parseInt(getState("whoBaseline") || "0", 10);
+    const baseline = parseInt(getState("ptsBaseline") || "0", 10);
     await holdForDebug("", idle, baseline);
   }
 
