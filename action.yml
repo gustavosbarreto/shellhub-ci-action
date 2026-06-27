@@ -10,9 +10,8 @@ inputs:
     description: "ShellHub server address (e.g. https://cloud.shellhub.io)"
     required: true
   tenant-id:
-    description: "ShellHub namespace tenant ID. Optional: derived from the API key (which is already namespace-scoped) when omitted."
-    required: false
-    default: ""
+    description: "ShellHub namespace tenant ID. Required: the agent registers by tenant, and the API blocks API keys from listing namespaces."
+    required: true
   api-key:
     description: "ShellHub API key with device accept/remove permission. Store as a secret."
     required: true
@@ -42,7 +41,7 @@ inputs:
     default: ""
 
 runs:
-  using: "node20"
+  using: "node24"
   main: "index.js"
   post: "index.js"
   post-if: "!cancelled()"

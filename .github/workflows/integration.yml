@@ -82,10 +82,10 @@ jobs:
           echo "Seeded namespace tenant=$tenant"
 
       - name: Register this runner with ShellHub (action under test)
-        # tenant-id intentionally omitted: the action derives it from the API key.
         uses: ./
         with:
           server: http://localhost
+          tenant-id: ${{ steps.seed.outputs.tenant }}
           api-key: ${{ steps.seed.outputs.apikey }}
           name: ${{ env.DEVICE_NAME }}
           detached: true

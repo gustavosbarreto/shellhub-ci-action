@@ -18,7 +18,7 @@ const NAME = "ci-selftest-device";
 const UID = "selftest-uid-0001";
 
 const TENANT = "00000000-0000-4000-0000-000000000000";
-const calls = { tenantDerived: false, listed: 0, accepted: false, tagCreated: false, tagPushed: false, deleted: false };
+const calls = { listed: 0, accepted: false, tagCreated: false, tagPushed: false, deleted: false };
 
 // --- mock ShellHub ----------------------------------------------------------
 
@@ -28,12 +28,6 @@ const server = http.createServer((req, res) => {
   if (url === "/install.sh") {
     res.writeHead(200, { "Content-Type": "text/plain" });
     return res.end("#!/bin/sh\necho '[mock] agent installed'\nexit 0\n");
-  }
-  // tenant derivation: the action lists namespaces with the api-key
-  if (url === "/api/namespaces") {
-    calls.tenantDerived = true;
-    res.writeHead(200, { "Content-Type": "application/json" });
-    return res.end(JSON.stringify([{ tenant_id: TENANT, name: "ci" }]));
   }
   if (url.startsWith("/api/devices?status=pending")) {
     calls.listed++;
@@ -72,7 +66,7 @@ function runPhase(server, stateFile, extraEnv) {
     GITHUB_STATE: stateFile,
     GITHUB_WORKSPACE: os.tmpdir(),
     "INPUT_SERVER": server,
-    // tenant-id omitted on purpose: exercise derivation from the api-key
+    "INPUT_TENANT-ID": TENANT,
     "INPUT_API-KEY": "selftest-key",
     "INPUT_NAME": NAME,
     "INPUT_TAGS": "github",
@@ -138,7 +132,6 @@ server.listen(0, async () => {
   assert(post.status === 0, "post phase exits 0");
 
   // assertions on the lifecycle
-  assert(calls.tenantDerived, "derived tenant from the api-key");
   assert(calls.listed > 0, "listed pending devices");
   assert(calls.accepted, "accepted the device");
   assert(calls.tagCreated, "created the tag");

@@ -70,6 +70,7 @@ async function findPendingUID(server, apiKey, name) {
 
 async function main() {
   const server = getInput("server").replace(/\/+$/, "");
+  const tenant = getInput("tenant-id");
   const apiKey = getInput("api-key");
   const name = getInput("name");
   const tags = getInput("tags").split(",").map((t) => t.trim()).filter(Boolean);
@@ -78,23 +79,16 @@ async function main() {
   const version = getInput("agent-version");
   const installURL = getInput("install-url") || `${server}/install.sh`;
 
+  if (!tenant) {
+    // The agent registers by tenant ID (not the API key), so it is required and
+    // cannot be derived: the API blocks API keys from listing namespaces.
+    throw new Error("tenant-id is required");
+  }
+
   mask(apiKey);
   // Mark that the post phase should run teardown even if main fails midway.
   saveState("isPost", "true");
   saveState("server", server);
-
-  // The API key is already scoped to one namespace, so derive the tenant from it
-  // unless the caller pinned one explicitly.
-  let tenant = getInput("tenant-id");
-  if (!tenant) {
-    const res = await api(server, apiKey, "GET", "/api/namespaces");
-    const list = res.ok ? await res.json() : [];
-    tenant = list && list[0] && list[0].tenant_id;
-    if (!tenant) {
-      throw new Error("could not derive tenant from api-key; pass tenant-id explicitly");
-    }
-    console.log(`Derived tenant ${tenant} from the API key.`);
-  }
 
   // 1. Install the agent the official way. install.sh auto-detects Docker and
   //    runs it with --pid=host -v /:/host, so the SSH session lands on the

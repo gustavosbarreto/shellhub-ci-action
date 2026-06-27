@@ -14,6 +14,7 @@ ephemeral device, accepts it, and removes it when the job ends.
 - uses: shellhub-io/ci-action@v1
   with:
     server: https://cloud.shellhub.io
+    tenant-id: ${{ secrets.SHELLHUB_TENANT_ID }}
     api-key: ${{ secrets.SHELLHUB_API_KEY }}
 ```
 
@@ -38,6 +39,7 @@ isolated container.
   if: failure()
   with:
     server: https://cloud.shellhub.io
+    tenant-id: ${{ secrets.SHELLHUB_TENANT_ID }}
     api-key: ${{ secrets.SHELLHUB_API_KEY }}
     timeout: 1800
 ```
@@ -50,6 +52,7 @@ Stay reachable for the rest of the job instead of blocking:
 - uses: shellhub-io/ci-action@v1
   with:
     server: https://cloud.shellhub.io
+    tenant-id: ${{ secrets.SHELLHUB_TENANT_ID }}
     api-key: ${{ secrets.SHELLHUB_API_KEY }}
     detached: true
 ```
@@ -59,8 +62,8 @@ Stay reachable for the rest of the job instead of blocking:
 | Input | Required | Default | Description |
 |-------|----------|---------|-------------|
 | `server` | yes | | ShellHub server address |
+| `tenant-id` | yes | | Namespace tenant ID |
 | `api-key` | yes | | API key with device accept/remove permission (use a secret) |
-| `tenant-id` | no | derived from `api-key` | Namespace tenant ID. The API key is already namespace-scoped, so this is only needed to override it |
 | `name` | no | `ci-<run_id>-<attempt>` | Device name |
 | `tags` | no | `ci` | Comma-separated tags for access scoping |
 | `detached` | no | `false` | Continue the job instead of blocking |
