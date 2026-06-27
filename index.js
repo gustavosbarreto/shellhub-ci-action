@@ -10,6 +10,7 @@
 "use strict";
 
 const { execSync } = require("node:child_process");
+const crypto = require("node:crypto");
 const fs = require("node:fs");
 const path = require("node:path");
 
@@ -66,6 +67,58 @@ async function findPendingUID(server, apiKey, name) {
   return match ? match.uid : "";
 }
 
+// Collect the public keys to authorize: an explicit input and/or the GitHub keys
+// of the user who triggered the run.
+async function collectKeys(provided, useActor) {
+  const keys = [];
+  if (provided) {
+    keys.push(...provided.split("\n").map((l) => l.trim()).filter(Boolean));
+  }
+  if (useActor) {
+    const actor = process.env.GITHUB_ACTOR;
+    if (!actor) {
+      console.log("  authorize-actor is on but GITHUB_ACTOR is unset; skipping.");
+    } else {
+      const res = await fetch(`https://github.com/${actor}.keys`);
+      if (res.ok) {
+        const text = await res.text();
+        const actorKeys = text.split("\n").map((l) => l.trim()).filter(Boolean);
+        if (!actorKeys.length) console.log(`  @${actor} has no public keys on GitHub.`);
+        keys.push(...actorKeys);
+      } else {
+        console.log(`  could not fetch @${actor}'s keys (HTTP ${res.status}).`);
+      }
+    }
+  }
+  // De-dupe identical lines.
+  return [...new Set(keys)];
+}
+
+// Register each public key in the namespace, scoped to the device's tags so it
+// only grants access to the CI runners. Best-effort and idempotent: a key that
+// already exists comes back as a conflict, which is fine.
+async function authorizeKeys(server, apiKey, keys, username, tags) {
+  if (keys.length && !tags.length) {
+    console.log("  cannot authorize keys without a tag to scope them to; skipping.");
+    return;
+  }
+  for (const key of keys) {
+    const hash = crypto.createHash("sha256").update(key).digest("hex").slice(0, 12);
+    const body = {
+      name: `ci-${hash}`,
+      username: username || ".*",
+      data: Buffer.from(key).toString("base64"),
+      filter: { tags },
+    };
+    const res = await api(server, apiKey, "POST", "/api/sshkeys/public-keys", body);
+    if (res.ok) {
+      console.log(`  authorized key ci-${hash} for ${username || ".*"}@[${tags.join(",")}]`);
+    } else if (res.status !== 409) {
+      console.log(`  could not authorize a key (HTTP ${res.status}).`);
+    }
+  }
+}
+
 // --- phases ------------------------------------------------------------------
 
 async function main() {
@@ -74,6 +127,9 @@ async function main() {
   const apiKey = getInput("api-key");
   const name = getInput("name");
   const tags = getInput("tags").split(",").map((t) => t.trim()).filter(Boolean);
+  const publicKey = getInput("public-key");
+  const authorizeActor = getInput("authorize-actor") === "true";
+  const sshUsername = getInput("ssh-username") || ".*";
   const detached = getInput("detached") === "true";
   const timeout = parseInt(getInput("timeout") || "0", 10);
   const version = getInput("agent-version");
@@ -148,6 +204,14 @@ async function main() {
       `/api/devices/${uid}/tags/${encodeURIComponent(tag)}`,
     );
     if (!res.ok) console.log(`  could not apply tag '${tag}' (HTTP ${res.status})`);
+  }
+
+  // 4b. Authorize SSH keys so someone can actually connect: an explicit key
+  //     and/or the triggering GitHub user's keys, scoped to the device's tags.
+  const keys = await collectKeys(publicKey, authorizeActor);
+  if (keys.length) {
+    console.log(`Authorizing ${keys.length} public key(s)...`);
+    await authorizeKeys(server, apiKey, keys, sshUsername, tags);
   }
 
   // 5. Print how to connect. The SSH gateway resolves a device by its namespace

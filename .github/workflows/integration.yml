@@ -81,6 +81,19 @@ jobs:
           echo "apikey=$apikey" >> "$GITHUB_OUTPUT"
           echo "Seeded namespace tenant=$tenant"
 
+      - name: Generate an SSH key to authorize
+        id: sshkey
+        run: |
+          set -euo pipefail
+          # ed25519 on purpose: it's the common GitHub key type, so this also
+          # proves the action authorizes non-RSA keys end to end.
+          ssh-keygen -t ed25519 -f "$HOME/ci_key" -N '' -q
+          {
+            echo "pubkey<<EOF"
+            cat "$HOME/ci_key.pub"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Register this runner with ShellHub (action under test)
         uses: ./
         with:
@@ -88,6 +101,7 @@ jobs:
           tenant-id: ${{ steps.seed.outputs.tenant }}
           api-key: ${{ steps.seed.outputs.apikey }}
           name: ${{ env.DEVICE_NAME }}
+          public-key: ${{ steps.sshkey.outputs.pubkey }}
           detached: true
 
       - name: Assert the runner is registered, accepted and online
@@ -109,19 +123,10 @@ jobs:
       - name: SSH into the runner through ShellHub and prove the host shell
         run: |
           set -euo pipefail
-          BASE=http://localhost
-          KEY='${{ steps.seed.outputs.apikey }}'
-          # Register a public key scoped to the 'github' tag (the action tags the
-          # device 'github') for any username. This is the auth model: a key the
-          # user registers, scoped to the device by tag.
-          ssh-keygen -t rsa -b 2048 -f ci_key -N '' -q
-          data=$(base64 -w0 ci_key.pub)
-          curl -fsS -X POST "$BASE/api/sshkeys/public-keys" -H "X-API-Key: $KEY" \
-            -H 'Content-Type: application/json' \
-            -d "{\"name\":\"ci\",\"username\":\".*\",\"data\":\"$data\",\"filter\":{\"tags\":[\"github\"]}}"
-          # SSH back into THIS runner through the ShellHub gateway (resolves by
-          # namespace name 'ci' + device name) and run a command on the host.
-          out=$(ssh -i ci_key -p 2222 \
+          # The action already authorized this key (no manual registration). SSH
+          # back into THIS runner through the gateway (resolved by namespace name
+          # 'ci' + device name) and run a command on the host.
+          out=$(ssh -i "$HOME/ci_key" -p 2222 \
             -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
             -o BatchMode=yes -o ConnectTimeout=20 \
             "root@ci.$DEVICE_NAME@localhost" 'cat /etc/hostname')

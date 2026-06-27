@@ -23,6 +23,18 @@ inputs:
     description: "Comma-separated tags to apply to the device (for access scoping). Tag names must be alphanumeric and at least 3 characters."
     required: false
     default: "github"
+  public-key:
+    description: "SSH public key(s) to authorize for connecting, in authorized_keys format (one per line). Scoped to the device's tags. Leave empty to manage keys yourself in ShellHub."
+    required: false
+    default: ""
+  authorize-actor:
+    description: "If true, authorize the GitHub public keys of the user who triggered the run (from github.com/<actor>.keys), scoped to the device's tags."
+    required: false
+    default: "false"
+  ssh-username:
+    description: "Username (regexp) the authorized keys may log in as on the runner. Defaults to any."
+    required: false
+    default: ".*"
   detached:
     description: "If true, the job continues while the SSH session stays reachable. If false (default), the job blocks until you connect and disconnect, or you touch the continue file."
     required: false

@@ -65,11 +65,48 @@ Stay reachable for the rest of the job instead of blocking:
 | `tenant-id` | yes | | Namespace tenant ID |
 | `api-key` | yes | | API key with device accept/remove permission (use a secret) |
 | `name` | no | `ci-<run_id>-<attempt>` | Device name |
-| `tags` | no | `ci` | Comma-separated tags for access scoping |
+| `tags` | no | `github` | Comma-separated tags for access scoping |
+| `public-key` | no | | SSH public key(s) to authorize, in authorized_keys format (one per line) |
+| `authorize-actor` | no | `false` | Authorize the GitHub keys of the user who triggered the run |
+| `ssh-username` | no | `.*` | Username (regexp) the authorized keys may log in as |
 | `detached` | no | `false` | Continue the job instead of blocking |
 | `timeout` | no | `0` | Max seconds to block (0 = indefinite) |
 | `agent-version` | no | server's version | Pin the agent version |
 | `install-url` | no | `<server>/install.sh` | Override the install script URL |
+
+## Authorizing access
+
+To SSH in, your public key must be authorized in ShellHub, scoped to the device's
+tags. There are three ways:
+
+1. **Manage it yourself** (default) — register your key once in ShellHub, scoped
+   to the `github` tag. Every CI runner this action registers is then reachable.
+2. **Provide a key** — pass it to the action; it registers the key scoped to the
+   tags:
+
+   ```yaml
+   - uses: shellhub-io/ci-action@v1
+     with:
+       server: https://cloud.shellhub.io
+       tenant-id: ${{ secrets.SHELLHUB_TENANT_ID }}
+       api-key: ${{ secrets.SHELLHUB_API_KEY }}
+       public-key: ${{ secrets.MY_SSH_PUBLIC_KEY }}
+   ```
+
+3. **Use the triggering user's GitHub keys** — fetch them from
+   `github.com/<actor>.keys` automatically:
+
+   ```yaml
+   - uses: shellhub-io/ci-action@v1
+     with:
+       server: https://cloud.shellhub.io
+       tenant-id: ${{ secrets.SHELLHUB_TENANT_ID }}
+       api-key: ${{ secrets.SHELLHUB_API_KEY }}
+       authorize-actor: true
+   ```
+
+Authorized keys persist in the namespace (scoped to the tag) and are reused across
+runs; remove them in ShellHub when no longer needed.
 
 ## Requirements
 

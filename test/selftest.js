@@ -18,7 +18,7 @@ const NAME = "ci-selftest-device";
 const UID = "selftest-uid-0001";
 
 const TENANT = "00000000-0000-4000-0000-000000000000";
-const calls = { listed: 0, accepted: false, tagCreated: false, tagPushed: false, deleted: false };
+const calls = { listed: 0, accepted: false, tagCreated: false, tagPushed: false, keyAuthorized: false, deleted: false };
 
 // --- mock ShellHub ----------------------------------------------------------
 
@@ -49,6 +49,11 @@ const server = http.createServer((req, res) => {
     res.writeHead(200);
     return res.end();
   }
+  if (req.method === "POST" && url === "/api/sshkeys/public-keys") {
+    calls.keyAuthorized = true;
+    res.writeHead(201);
+    return res.end();
+  }
   if (req.method === "DELETE" && url === `/api/devices/${UID}`) {
     calls.deleted = true;
     res.writeHead(200);
@@ -70,6 +75,7 @@ function runPhase(server, stateFile, extraEnv) {
     "INPUT_API-KEY": "selftest-key",
     "INPUT_NAME": NAME,
     "INPUT_TAGS": "github",
+    "INPUT_PUBLIC-KEY": "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAISELFTESTKEYxxxxxxxxxxxxxxxxxxxxxxxxxxxx ci",
     "INPUT_DETACHED": "true", // don't block in main
     "INPUT_TIMEOUT": "0",
     "INPUT_AGENT-VERSION": "",
@@ -136,6 +142,7 @@ server.listen(0, async () => {
   assert(calls.accepted, "accepted the device");
   assert(calls.tagCreated, "created the tag");
   assert(calls.tagPushed, "pushed the tag to the device");
+  assert(calls.keyAuthorized, "authorized the provided public key");
   assert(state.uid === UID, "saved the device uid to state");
   assert(calls.deleted, "deleted the device in the post phase");
 
