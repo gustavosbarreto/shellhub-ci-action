@@ -20,8 +20,9 @@ ephemeral device, accepts it, and removes it when the job ends.
 
 By default the job blocks at this step waiting for you to connect, then holds
 until you disconnect. Run `sudo touch /continue` inside the session to release it
-early. Connection state is read from the runner's utmp (`who`), so it releases
-when you disconnect even if the connection drops.
+early. Connection state is read from the runner's `/dev/pts` (each session gets a
+PTY), so it releases a few seconds after you disconnect, even if the connection
+drops.
 
 Connect with the SSHID printed in the job log:
 

@@ -326,7 +326,7 @@ async function post() {
 
   // Detached + idle-timeout: at job end, wait up to idle-timeout for a connection
   // and then until it disconnects, before tearing down. Connection state comes
-  // from utmp on the runner (see holdForDebug), so no session API is needed.
+  // from /dev/pts on the runner (see holdForDebug), so no session API is needed.
   const idle = parseInt(getInput("idle-timeout") || "0", 10);
   if (getInput("detached") === "true" && idle > 0) {
     const baseline = parseInt(getState("ptsBaseline") || "0", 10);
