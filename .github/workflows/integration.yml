@@ -39,6 +39,9 @@ jobs:
           export COMPOSE_FILE=docker-compose.yml:docker-compose.postgres.yml
           echo "COMPOSE_FILE=$PWD/docker-compose.yml:$PWD/docker-compose.postgres.yml" >> "$GITHUB_ENV"
           echo "SHELLHUB_DIR=$PWD" >> "$GITHUB_ENV"
+          # The compose mounts pre-generated RSA keys as secrets; the Makefile
+          # generates them (api_private_key/api_public_key/ssh_private_key).
+          make keygen
           docker compose up -d
 
       - name: Wait for the API
