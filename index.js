@@ -95,12 +95,15 @@ async function main() {
   //    runner host, not an isolated container. A unique identity per run means a
   //    fresh device every time (no dedup collision with a previous run).
   console.log(`Installing ShellHub agent as '${name}'...`);
+  // install.sh reads these UNPREFIXED from the environment (and forwards them to
+  // the container as SHELLHUB_*). Passing the SHELLHUB_-prefixed names here would
+  // be silently ignored, and the agent would register with a random name.
   const env = {
     ...process.env,
     SERVER_ADDRESS: server,
     TENANT_ID: tenant,
-    SHELLHUB_PREFERRED_HOSTNAME: name,
-    SHELLHUB_PREFERRED_IDENTITY: name,
+    PREFERRED_HOSTNAME: name,
+    PREFERRED_IDENTITY: name,
   };
   if (version) env.AGENT_VERSION = version;
   execSync(`curl -sSf "${installURL}" | sh`, { stdio: "inherit", env });
@@ -114,7 +117,10 @@ async function main() {
     } catch (err) {
       console.log(`  ${err.message}, retrying...`);
     }
-    if (!uid) await sleep(2000);
+    if (!uid) {
+      if (i % 5 === 0) console.log(`  waiting for '${name}' to register...`);
+      await sleep(2000);
+    }
   }
   if (!uid) {
     throw new Error(`device '${name}' never registered as pending`);
