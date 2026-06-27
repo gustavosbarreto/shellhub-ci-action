@@ -126,6 +126,53 @@ async function authorizeKeys(server, apiKey, keys, username, tags) {
   }
 }
 
+// Number of interactive logins on the runner, read from utmp. The agent writes a
+// utmp record for each host-mode SSH session and clears it when the shell exits
+// (even on an abrupt disconnect, since it tears down the PTY), so this detects
+// connect/disconnect locally, without any ShellHub session API.
+function loginCount() {
+  try {
+    const out = execSync("who 2>/dev/null | wc -l", { encoding: "utf8" }).trim();
+    return parseInt(out || "0", 10) || 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Hold the job open for an interactive debug session: wait up to connectTimeout
+// for someone to connect, then hold until they disconnect. `sudo touch /continue`
+// releases it manually at any point. connectTimeout <= 0 waits indefinitely for
+// the first connection.
+async function holdForDebug(sshid, connectTimeout, baseline) {
+  const continueFiles = ["/continue", path.join(process.env.GITHUB_WORKSPACE || ".", "continue")];
+  const deadline = connectTimeout > 0 ? Date.now() + connectTimeout * 1000 : Infinity;
+  let connected = false;
+  console.log(
+    connectTimeout > 0
+      ? `Waiting up to ${connectTimeout}s for a connection (or 'sudo touch /continue')...`
+      : `Waiting for a connection (or 'sudo touch /continue')...`,
+  );
+  while (true) {
+    if (continueFiles.some((f) => fs.existsSync(f))) {
+      console.log("Continue file found; releasing.");
+      return;
+    }
+    const active = loginCount() > baseline;
+    if (active && !connected) {
+      connected = true;
+      console.log("Connection detected; holding until you disconnect.");
+    } else if (!active && connected) {
+      console.log("Disconnected; releasing.");
+      return;
+    } else if (!connected && Date.now() > deadline) {
+      console.log("No connection within the timeout; releasing.");
+      return;
+    }
+    if (!connected && sshid) notice(`Waiting for SSH:  ssh <user>@${sshid}`);
+    await sleep(5000);
+  }
+}
+
 // --- phases ------------------------------------------------------------------
 
 async function main() {
@@ -152,6 +199,10 @@ async function main() {
   // Mark that the post phase should run teardown even if main fails midway.
   saveState("isPost", "true");
   saveState("server", server);
+  // Snapshot the runner's logins now, before anyone could connect, so we can
+  // tell a real debug session apart from any baseline login later.
+  const whoBaseline = loginCount();
+  saveState("whoBaseline", String(whoBaseline));
 
   // 1. Install the agent the official way. install.sh auto-detects Docker and
   //    runs it with --pid=host -v /:/host, so the SSH session lands on the
@@ -248,25 +299,9 @@ async function main() {
     return;
   }
 
-  // 6. Blocking mode: hold the job open so you have time to connect. Release by
-  //    running `sudo touch /continue` inside the SSH session, or let it time out.
-  const continueFiles = [
-    "/continue",
-    path.join(process.env.GITHUB_WORKSPACE || ".", "continue"),
-  ];
-  const deadline = timeout > 0 ? Date.now() + timeout * 1000 : Infinity;
-  console.log(
-    `Blocking. Connect via SSH above; run 'sudo touch /continue' to release` +
-      (timeout > 0 ? ` (auto-release in ${timeout}s).` : "."),
-  );
-  while (Date.now() < deadline) {
-    if (continueFiles.some((f) => fs.existsSync(f))) {
-      console.log("Continue file found, releasing the job.");
-      break;
-    }
-    notice(`Waiting for SSH. Connect:  ssh <user>@${sshid}`);
-    await sleep(5000);
-  }
+  // 6. Blocking mode: wait for a connection (up to `timeout`), then hold until
+  //    you disconnect. `sudo touch /continue` releases it manually.
+  await holdForDebug(sshid, timeout, whoBaseline);
 }
 
 async function post() {
@@ -278,15 +313,13 @@ async function post() {
     return;
   }
 
-  // Detached + idle-timeout: hold the runner open for a fixed window at job end
-  // so someone still has time to connect. We deliberately do NOT try to release
-  // early on disconnect: there is no reliable per-device active-session query yet
-  // (shellhub-io/shellhub#6564), so a fixed hold is honest rather than falsely
-  // precise. Once that lands, this can wait for the session to actually end.
+  // Detached + idle-timeout: at job end, wait up to idle-timeout for a connection
+  // and then until it disconnects, before tearing down. Connection state comes
+  // from utmp on the runner (see holdForDebug), so no session API is needed.
   const idle = parseInt(getInput("idle-timeout") || "0", 10);
   if (getInput("detached") === "true" && idle > 0) {
-    console.log(`Holding the runner open for ${idle}s before teardown...`);
-    await sleep(idle * 1000);
+    const baseline = parseInt(getState("whoBaseline") || "0", 10);
+    await holdForDebug("", idle, baseline);
   }
 
   // Delete the ephemeral device.

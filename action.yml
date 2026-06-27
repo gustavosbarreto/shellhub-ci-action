@@ -40,11 +40,11 @@ inputs:
     required: false
     default: "false"
   timeout:
-    description: "Max seconds to hold the runner open for SSH in blocking mode (0 = wait indefinitely)."
+    description: "Blocking mode: seconds to wait for an SSH connection. Once connected, the job is held until you disconnect (or run 'sudo touch /continue'). 0 = wait indefinitely for a connection."
     required: false
     default: "0"
   idle-timeout:
-    description: "In detached mode, seconds the post step waits at job end for an SSH connection before tearing down (0 = tear down immediately). Once connected, it waits until you disconnect."
+    description: "Detached mode: seconds the post step waits at job end for an SSH connection before tearing down. Once connected, it holds until you disconnect. 0 = tear down immediately."
     required: false
     default: "0"
   agent-version:

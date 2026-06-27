@@ -133,6 +133,30 @@ jobs:
           echo "hostname seen over ShellHub SSH: '$out' (runner: '$(cat /etc/hostname)')"
           test "$out" = "$(cat /etc/hostname)"
 
+      - name: Prove utmp-based connection detection on the runner
+        run: |
+          set -euo pipefail
+          base=$(who | wc -l)
+          # open a backgrounded PTY session through ShellHub and keep it alive
+          ssh -tt -i "$HOME/ci_key" -p 2222 \
+            -o StrictHostKeyChecking=no -o UserKnownHostsFile=/dev/null \
+            -o BatchMode=yes -o ConnectTimeout=20 \
+            "root@ci.$DEVICE_NAME@localhost" 'sleep 25' &
+          sshpid=$!
+          sleep 6
+          during=$(who | wc -l)
+          echo "who: baseline=$base during=$during"
+          test "$during" -gt "$base"   # the session shows up in utmp
+          # disconnect and confirm utmp clears (even on a hard kill)
+          kill "$sshpid" 2>/dev/null || true
+          for _ in $(seq 1 10); do
+            [ "$(who | wc -l)" -le "$base" ] && break
+            sleep 2
+          done
+          after=$(who | wc -l)
+          echo "who after disconnect=$after"
+          test "$after" -le "$base"     # cleared on disconnect
+
       - name: ShellHub logs on failure
         if: failure()
         run: cd "$SHELLHUB_DIR" && ./bin/docker-compose logs --tail=120

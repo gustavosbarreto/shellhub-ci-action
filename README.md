@@ -18,8 +18,10 @@ ephemeral device, accepts it, and removes it when the job ends.
     api-key: ${{ secrets.SHELLHUB_API_KEY }}
 ```
 
-By default the job blocks at this step so you have time to connect. Run
-`sudo touch /continue` inside the SSH session to release it.
+By default the job blocks at this step waiting for you to connect, then holds
+until you disconnect. Run `sudo touch /continue` inside the session to release it
+early. Connection state is read from the runner's utmp (`who`), so it releases
+when you disconnect even if the connection drops.
 
 Connect with the SSHID printed in the job log:
 
@@ -70,8 +72,8 @@ Stay reachable for the rest of the job instead of blocking:
 | `authorize-actor` | no | `false` | Authorize the triggering user's GitHub keys (`true` requires them, `auto` is best-effort) |
 | `ssh-username` | no | `.*` | Username (regexp) the authorized keys may log in as |
 | `detached` | no | `false` | Continue the job instead of blocking |
-| `timeout` | no | `0` | Max seconds to block in blocking mode (0 = indefinite) |
-| `idle-timeout` | no | `0` | In detached mode, seconds the post step waits for a connection at job end (0 = tear down immediately) |
+| `timeout` | no | `0` | Blocking mode: seconds to wait for a connection (then holds until you disconnect; 0 = wait indefinitely) |
+| `idle-timeout` | no | `0` | Detached mode: seconds the post step waits for a connection at job end (then holds until disconnect; 0 = tear down immediately) |
 | `agent-version` | no | server's version | Pin the agent version |
 | `install-url` | no | `<server>/install.sh` | Override the install script URL |
 
