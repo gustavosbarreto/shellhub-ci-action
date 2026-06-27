@@ -339,14 +339,16 @@ async function post() {
     console.log(`::warning::could not remove device ${uid}: ${err.message}`);
   }
 
-  // Stop the agent container.
+  // Stop the agent container. Match it both ways across install.sh versions: by
+  // the default container name and by the label that newer versions add.
   try {
     execSync(
-      `docker ps -q --filter label=shellhub.role=agent | xargs -r docker rm -f`,
-      { stdio: "inherit" },
+      `docker rm -f shellhub >/dev/null 2>&1 || true; ` +
+        `docker ps -q --filter label=shellhub.role=agent | xargs -r docker rm -f >/dev/null 2>&1 || true`,
+      { stdio: "ignore" },
     );
   } catch {
-    /* agent may already be gone */
+    /* agent may already be gone, or this is not the Docker install path */
   }
 }
 
