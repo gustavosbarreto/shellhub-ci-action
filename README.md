@@ -140,13 +140,3 @@ key therefore also needs the public key remove permission.
 - The API key needs device accept/remove and, when authorizing keys, public key
   create/remove permissions (an administrator or owner key has these).
 - Namespace **auto-accept can be off**: the action accepts the device itself.
-
-## Security notes
-
-The API key can accept and remove any device in the namespace. Scope it to a
-dedicated key and rotate it. A future version will replace it with GitHub OIDC,
-so no ShellHub secret is stored in the repo.
-
-On hard job cancellation the post step may not run, leaving the device behind
-(soft-deleted). A server-side reaper of stale ephemeral devices is the planned
-authoritative cleanup.
